@@ -1,45 +1,34 @@
 import requests
 import time
-from . import config
+from typing import Dict
 
-def notify_evaluation(evaluation_url: str, payload: dict):
+def notify_evaluation_service(evaluation_url: str, data: Dict, max_retries: int = 5):
     """
-    Sends a POST request to the evaluation URL with the deployment details.
-    Includes retry logic with exponential backoff.
+    Notify evaluation service with exponential backoff
     """
-    max_retries = 5
-    delay = 1  # initial delay in seconds
-
     for attempt in range(max_retries):
-        if config.MOCK_MODE:
-            print(f"MOCK_MODE: Simulating POST to {evaluation_url} (Attempt {attempt + 1})")
-            print(f"Payload: {payload}")
-            return {
-                "mocked": True,
-                "endpoint": evaluation_url,
-                "status": 200,
-                "response": {"message": "Evaluation notification received."}
-            }
-
-        # Real implementation
         try:
-            print(f"Sending POST to {evaluation_url} (Attempt {attempt + 1})")
-            response = requests.post(evaluation_url, json=payload, timeout=10)
-
+            response = requests.post(
+                evaluation_url,
+                json=data,
+                headers={"Content-Type": "application/json"},
+                timeout=30
+            )
+            
             if response.status_code == 200:
-                print("Successfully notified evaluation server.")
-                return response.json()
+                print(f"✅ Evaluation service notified successfully (attempt {attempt + 1})")
+                return True
             else:
-                print(f"Evaluation server returned status {response.status_code}. Retrying...")
-
+                print(f"⚠️ Evaluation service returned {response.status_code}: {response.text}")
+                
         except requests.RequestException as e:
-            print(f"Request to evaluation server failed: {e}. Retrying...")
-
-        # Wait before the next retry
+            print(f"⚠️ Evaluation service connection failed (attempt {attempt + 1}): {e}")
+        
+        # Exponential backoff
         if attempt < max_retries - 1:
-            print(f"Waiting {delay} seconds before next retry.")
+            delay = 2 ** attempt
+            print(f"🔄 Retrying in {delay} seconds...")
             time.sleep(delay)
-            delay *= 2 # Exponential backoff
-
-    # If all retries fail, raise an exception
-    raise requests.RequestException(f"Failed to notify evaluation server at {evaluation_url} after {max_retries} attempts.")
+    
+    print("❌ All evaluation service notification attempts failed")
+    return False

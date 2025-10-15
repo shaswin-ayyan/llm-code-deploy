@@ -4,4 +4,7 @@ requests
 python-dotenv
 PyGithub
 pytest
-httpx
+openai
+requests
+pydantic
+python-multipart
