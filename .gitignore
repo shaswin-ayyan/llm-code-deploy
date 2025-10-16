@@ -97,3 +97,4 @@ Thumbs.db
 .idea/
 secrets.*
 instance/
+.vercel

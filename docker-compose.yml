@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  llm-deployer:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - DEPLOYMENT_SECRET=my-super-secret-key-2025
+      - OPENAI_API_KEY=your_aipipe_token_here
+      - AIPIPE_EMAIL=23f1000266@ds.study.iitm.ac.in
+      - GITHUB_TOKEN=ghp_your_github_token_here
+      - GITHUB_USER=shaswin-ayyan
+      - MOCK_MODE=False
+      - PORT=8000
+    volumes:
+      - ./app:/app/app
+    restart: unless-stopped
+
+  # Optional: Add Redis for caching if needed
+  # redis:
+  #   image: redis:alpine
+  #   ports:
+  #     - "6379:6379"
