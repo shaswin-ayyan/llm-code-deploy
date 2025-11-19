@@ -1,10 +1,10 @@
-FastAPI
+fastapi
 uvicorn
 requests
 python-dotenv
-PyGithub
 pytest
-openai
-requests
 pydantic
 python-multipart
+playwright
+beautifulsoup4
+httpx
