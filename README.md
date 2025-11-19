@@ -1,17 +1,16 @@
-# LLM Code Deployment API
+# Data Science Quiz Solver API
 
 ## 1. Project Overview
 
-The **LLM Code Deployment API** is a sophisticated automation system designed to bridge the gap between AI-driven code generation and live deployment. It listens for API requests, generates complete web applications based on a provided brief, creates a GitHub repository, pushes the generated code, and activates GitHub Pages for immediate hosting. This platform is engineered for rapid, scalable, and reliable deployment of AI-generated applications, making it an ideal solution for hackathons, educational platforms, and rapid prototyping environments.
+The **Data Science Quiz Solver API** is an automated system designed to solve data science quizzes found on web pages. The application receives a URL to a quiz, scrapes the content, uses a large language model (LLM) to analyze the questions and generate answers, and then submits the answers to the quiz's submission endpoint.
 
 ### Key Features:
 
-- **Automated Code Generation**: Leverages AI (via AIPipe and `gpt-4.1-nano`) to generate `HTML`, `CSS`, and `JavaScript` code from a simple text brief.
-- **End-to-End Deployment**: Automates the entire workflow from code creation to a live, publicly accessible URL.
-- **GitHub Integration**: Seamlessly creates GitHub repositories, manages files, and enables GitHub Pages.
-- **Scalable Architecture**: Built with `FastAPI` and designed to run in `Docker` containers, ensuring high performance and scalability.
-- **Mock & Production Modes**: Includes a `MOCK_MODE` for safe local testing without making real API calls to external services.
-- **Multi-Round Submissions**: Supports iterative development by allowing updates to an existing repository for subsequent rounds of a task.
+- **Automated Web Scraping**: Uses `Playwright` to scrape quiz content, even from dynamic, JavaScript-heavy websites.
+- **AI-Powered Quiz Solving**: Leverages an LLM (`gpt-4.1-nano`) to analyze the quiz structure and solve the questions.
+- **Efficient Token Usage**: A multi-step AI process first analyzes the quiz structure and then solves each question individually, which is more efficient than sending the entire quiz in a single request.
+- **Automated Answer Submission**: The system automatically submits the AI-generated answers to the quiz's submission URL.
+- **Modular Architecture**: The application is built with a clean, modular design, with separate components for scraping, AI orchestration, and submission.
 
 ---
 
@@ -19,21 +18,48 @@ The **LLM Code Deployment API** is a sophisticated automation system designed to
 
 The application is built on a modern Python stack and follows a modular, service-oriented architecture.
 
+### System Design Diagram
+
+```
++-----------------+      +---------------------+      +----------------------+
+|                 |      |                     |      |                      |
+|  FastAPI Server |----->|    Web Scraper      |----->|   Quiz Website       |
+|  (app/main.py)  |      | (Playwright)        |      | (External)           |
+|                 |      |                     |      |                      |
++-------+---------+      +---------------------+      +----------------------+
+        |
+        |
+        v
++-----------------+      +----------------------+
+|                 |      |                      |
+| AI Orchestrator |----->|   LLM                |
+| (gpt-4.1-nano)  |      | (AIPipe/OpenRouter)  |
+|                 |      |                      |
++-------+---------+      +----------------------+
+        |
+        |
+        v
++-----------------+      +----------------------+
+|                 |      |                      |
+| Submission      |----->|   Submission URL     |
+| Handler         |      | (External)           |
+|                 |      |                      |
++-----------------+      +----------------------+
+```
+
 ### Core Components:
 
-- **FastAPI Application (`app/main.py`)**: The central API server that handles incoming deployment requests, orchestrates the workflow, and manages communication between components.
-- **Code Generator (`app/generator.py`)**: Interfaces with the `AIPipe` service to generate application code. It constructs a detailed prompt, sends it to the AI model, and parses the response into a file structure.
-- **GitHub Manager (`app/github_utils.py`)**: Manages all interactions with the GitHub API, including creating repositories, pushing files, and enabling GitHub Pages. It is designed to work in both production and mock modes.
-- **Evaluation Notifier (`app/evaluation_utils.py`)**: Sends a notification to a specified callback URL upon successful deployment, providing key details like the repository URL and live pages URL.
-- **Configuration (`app/config.py`)**: Loads all required credentials and settings from environment variables, ensuring that no sensitive information is hardcoded.
+- **FastAPI Application (`app/main.py`)**: The main API server that receives the quiz URL and orchestrates the entire workflow.
+- **Web Scraper (`app/scraper/scraper.py`)**: Uses `Playwright` to scrape the quiz's HTML content.
+- **AI Orchestrator (`app/ai_orchestrator/orchestrator.py`)**: Manages all interactions with the LLM, including analyzing the quiz structure and solving the questions.
+- **Submission Handler (`app/submission_handler/handler.py`)**: Submits the AI-generated answers to the quiz's submission URL.
 
 ### Technology Stack:
 
 - **Backend**: `Python 3.11`, `FastAPI`
-- **Code Generation**: `AIPipe` (`gpt-4.1-nano`)
-- **CI/CD & Hosting**: `GitHub`, `GitHub Actions`, `GitHub Pages`
-- **Containerization**: `Docker`, `Docker Compose`
-- **Dependencies**: `PyGithub`, `python-dotenv`, `requests`, `uvicorn`
+- **Web Scraping**: `Playwright`, `BeautifulSoup4`
+- **AI Model**: `gpt-4.1-nano` (via AIPipe or OpenRouter)
+- **Testing**: `pytest`, `unittest.mock`
 
 ---
 
@@ -44,39 +70,21 @@ Follow these steps to set up and run the application locally.
 ### Prerequisites:
 
 - **Python 3.11**
-- **Docker** and **Docker Compose**
 - **Git**
-- A **GitHub account** with a [Personal Access Token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token) (`repo` and `workflow` scopes).
-- An **AIPipe (OpenAI) API Key**.
+- An **API key** for your chosen LLM provider (e.g., AIPipe, OpenRouter).
 
 ### Local Setup Instructions:
 
 1.  **Clone the Repository**:
     ```bash
     git clone <repository_url>
-    cd llm-code-deployment-api
+    cd data-science-quiz-solver
     ```
 
 2.  **Configure Environment Variables**:
-    Create a `.env` file in the `app/` directory by copying the example.
-    ```bash
-    cp app/.env.example app/.env
-    ```
-    Edit `app/.env` and fill in the required values:
+    Create a `.env` file in the root directory and add your LLM API key:
     ```env
-    # Deployment Security
-    DEPLOYMENT_SECRET="your-strong-secret-key"
-
-    # AI Service Configuration
-    OPENAI_API_KEY="your-aipipe-or-openai-api-key"
-    AIPIPE_EMAIL="your-aipipe-registered-email"
-
-    # GitHub Configuration
-    GITHUB_TOKEN="your-github-personal-access-token"
-    GITHUB_USER="your-github-username"
-
-    # Application Mode
-    MOCK_MODE="True" # Set to "False" for production
+    OPENAI_API_KEY="your-llm-api-key"
     ```
 
 3.  **Install Dependencies**:
@@ -84,136 +92,57 @@ Follow these steps to set up and run the application locally.
     pip install -r requirements.txt
     ```
 
-4.  **Run with Docker Compose**:
-    For a production-like setup, use Docker Compose.
+4.  **Install Playwright Browsers**:
     ```bash
-    docker-compose up --build
+    playwright install
     ```
-    The API will be accessible at `http://localhost:8000`.
 
-5.  **Run Locally for Debugging**:
-    To run the app directly for easier debugging:
+5.  **Run the Application**:
     ```bash
     uvicorn app.main:app --reload --port 8000
     ```
+    The API will be accessible at `http://localhost:8000`.
 
 ---
 
-## 4. Configuration
+## 4. API Documentation
 
-All configuration is managed via environment variables loaded by `app/config.py`.
-
-| Variable            | Description                                                                                              | Default   |
-| ------------------- | -------------------------------------------------------------------------------------------------------- | --------- |
-| `DEPLOYMENT_SECRET` | A secret key to authorize deployment requests.                                                           | `None`    |
-| `OPENAI_API_KEY`    | Your API key for the AIPipe/OpenAI service.                                                              | `None`    |
-| `AIPIPE_EMAIL`      | The email associated with your AIPipe account.                                                           | `None`    |
-| `GITHUB_TOKEN`      | Your GitHub Personal Access Token for API operations.                                                    | `None`    |
-| `GITHUB_USER`       | Your GitHub username.                                                                                    | `None`    |
-| `MOCK_MODE`         | If `True`, the app simulates API calls to GitHub and AIPipe. Set to `False` for live deployments.          | `True`    |
-| `PORT`              | The port on which the FastAPI application runs.                                                          | `8000`    |
-
----
-
-## 5. API Documentation
-
-The API is fully documented using OpenAPI (Swagger) and ReDoc.
+The API is fully documented using OpenAPI (Swagger).
 
 -   **Swagger UI**: `http://localhost:8000/docs`
--   **ReDoc**: `http://localhost:8000/redoc`
 
 ### Endpoints:
 
-#### `GET /`
+#### `POST /api/solve`
 
--   **Description**: Root endpoint to check service status.
--   **Response**: `{"status": "ready", "service": "LLM Code Deployment"}`
-
-#### `GET /health`
-
--   **Description**: Provides a detailed health check of the API and its components.
--   **Response**:
-    ```json
-    {
-      "status": "healthy",
-      "service": "LLM Deployment API",
-      "mode": "mock",
-      "components": {
-        "code_generator": true,
-        "github_manager": true
-      },
-      "uptime": 120.5
-    }
-    ```
-
-#### `POST /api/deploy`
-
--   **Description**: The main endpoint for generating and deploying a web application.
+-   **Description**: The main endpoint for solving a data science quiz.
 -   **Request Body**:
     ```json
     {
       "email": "user@example.com",
-      "secret": "your-strong-secret-key",
-      "task": "interactive-dashboard",
-      "round": 1,
-      "nonce": "unique-identifier-string",
-      "brief": "Create a simple dashboard with a chart and a data table.",
-      "checks": ["check1", "check2"],
-      "evaluation_url": "https://eval-service.example.com/notify",
-      "attachments": [
-        {
-          "name": "data.csv",
-          "url": "data:text/csv;base64,..."
-        }
-      ]
+      "secret": "your_quiz_secret",
+      "url": "http://www.example.com/quiz-843"
     }
     ```
 -   **Success Response (200 OK)**:
     ```json
     {
-      "status": "success",
-      "message": "Round 1 deployment completed",
-      "repo_url": "https://github.com/your-user/interactive-dashboard",
-      "commit_sha": "mock_commit_sha",
-      "pages_url": "https://your-user.github.io/interactive-dashboard/",
-      "generated_files": ["index.html", "README.md", "LICENSE"],
-      "mode": "mock",
-      "action": "created"
+      "status": "submission_complete",
+      "url": "http://www.example.com/quiz-843",
+      "submission_details": {
+        "status": "success",
+        "status_code": 200,
+        "response_body": "..."
+      }
     }
     ```
 -   **Error Responses**:
-    -   `403 Forbidden`: Invalid `DEPLOYMENT_SECRET`.
-    -   `500 Internal Server Error`: An error occurred during code generation or GitHub operations.
+    -   `404 Not Found`: The quiz URL could not be reached.
+    -   `500 Internal Server Error`: An error occurred during the solving process.
 
 ---
 
-## 6. Deployment
-
-The application is designed to be deployed using Docker.
-
-1.  **Build the Docker Image**:
-    ```bash
-    docker build -t llm-deployer .
-    ```
-
-2.  **Run the Container**:
-    ```bash
-    docker run -d -p 8000:8000 \
-      --name llm-deployer-instance \
-      -e DEPLOYMENT_SECRET="your-production-secret" \
-      -e OPENAI_API_KEY="your-production-aipipe-key" \
-      -e AIPIPE_EMAIL="your-production-email" \
-      -e GITHUB_TOKEN="your-production-github-token" \
-      -e GITHUB_USER="your-github-username" \
-      -e MOCK_MODE="False" \
-      llm-deployer
-    ```
-
-For a more robust setup, consider using a managed container service like **AWS Fargate**, **Google Cloud Run**, or **Azure Container Apps**.
-
----
-
-## 7. Testing
+## 5. Testing
 
 The project includes a suite of tests to ensure reliability.
 
@@ -225,10 +154,4 @@ To run the full test suite, use `pytest`:
 python -m pytest
 ```
 
-The tests are located in the `tests/` directory and use FastAPI's `TestClient` to simulate API requests in a controlled environment. The tests are configured to run in `MOCK_MODE` to avoid making real API calls.
-
----
-
-## 8. License
-
-This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) file for details.
+The tests are located in the `tests/` directory and use FastAPI's `TestClient` to simulate API requests and mock external services.
