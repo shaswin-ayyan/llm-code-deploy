@@ -1,25 +1,20 @@
 import os
 from dotenv import load_dotenv
 
-# Load environment variables
-current_dir = os.path.dirname(os.path.abspath(__file__))
-env_path = os.path.join(current_dir, '.env')
-load_dotenv(env_path)
+# Load environment variables from the parent directory's .env file
+load_dotenv()
 
-# AIPipe Configuration
+# LLM Configuration
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-AIPIPE_EMAIL = os.getenv("AIPIPE_EMAIL")
 
-# Other configurations
-DEPLOYMENT_SECRET = os.getenv("DEPLOYMENT_SECRET")
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-GITHUB_USER = os.getenv("GITHUB_USER")
-MOCK_MODE = os.getenv("MOCK_MODE", "False").lower() in ("true", "1", "t")
+# Security Configuration
+QUIZ_SECRET = os.getenv("QUIZ_SECRET")
 
 # Validation
 if not OPENAI_API_KEY:
-    raise ValueError("OPENAI_API_KEY is required")
-if not AIPIPE_EMAIL and not MOCK_MODE:
-    print("⚠️  AIPIPE_EMAIL is recommended for AIPipe service")
+    raise ValueError("OPENAI_API_KEY is required in the environment.")
 
-print(f"✅ AIPipe configured for: {AIPIPE_EMAIL}")
+if not QUIZ_SECRET:
+    print("⚠️  QUIZ_SECRET is not set. The application will not be secure.")
+
+print("✅ Configuration loaded.")
