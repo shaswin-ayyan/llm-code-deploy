@@ -1,181 +1,71 @@
-import os
-import sys
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import List, Dict, Any
-import requests
-import time
-from .generator import CodeGenerator
+from urllib.parse import urljoin
+from .scraper.scraper import WebScraper
+from .ai_orchestrator.orchestrator import AIOrchestrator
+from .submission_handler.handler import SubmissionHandler
 
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-print("🚀 Starting LLM Code Deployment API...")
-start_time = time.time()
+app = FastAPI(title="Data Science Quiz Solver API")
 
-# Import config first
-from . import config
-print(f"✅ Config loaded in {time.time() - start_time:.2f}s")
-
-app = FastAPI(title="LLM Code Deployment API")
-
-# Initialize components with error handling
-try:
-    from .generator import CodeGenerator
-    code_generator = CodeGenerator()
-    print(f"✅ CodeGenerator initialized in {time.time() - start_time:.2f}s")
-except Exception as e:
-    print(f"❌ CodeGenerator initialization failed: {e}")
-    code_generator = None
-
-try:
-    from .github_utils import github_manager
-    print(f"✅ GitHub manager initialized in {time.time() - start_time:.2f}s")
-except Exception as e:
-    print(f"❌ GitHub manager initialization failed: {e}")
-    github_manager = None
-
-try:
-    from .evaluation_utils import notify_evaluation_service
-    print(f"✅ Evaluation utils loaded in {time.time() - start_time:.2f}s")
-except Exception as e:
-    print(f"❌ Evaluation utils failed: {e}")
-    # Create a mock function
-    def notify_evaluation_service(url, data):
-        print(f"📨 Mock evaluation notification to: {url}")
-        return True
-
-print(f"🎉 App fully loaded in {time.time() - start_time:.2f} seconds")
-
-class Attachment(BaseModel):
-    name: str
+class QuizRequest(BaseModel):
     url: str
 
-class DeployRequest(BaseModel):
-    email: str
-    secret: str
-    task: str
-    round: int
-    nonce: str
-    brief: str
-    checks: List[str]
-    evaluation_url: str
-    attachments: List[Attachment] = []
+scraper = WebScraper()
+orchestrator = AIOrchestrator()
+handler = SubmissionHandler()
 
 @app.get("/")
 def read_root():
-    return {"status": "ready", "service": "LLM Code Deployment"}
+    return {"status": "ready", "service": "Data Science Quiz Solver API"}
 
-@app.get("/health")
-def health_check():
-    return {
-        "status": "healthy", 
-        "service": "LLM Deployment API",
-        "mode": "mock" if config.MOCK_MODE else "production",
-        "components": {
-            "code_generator": code_generator is not None,
-            "github_manager": github_manager is not None
-        },
-        "uptime": time.time() - start_time
-    }
+@app.post("/api/solve")
+async def solve_quiz(request: QuizRequest):
+    """
+    The complete end-to-end quiz solving pipeline.
+    """
+    print(f"Received quiz URL: {request.url}")
+    try:
+        # Step 1: Scrape the website
+        scraped_data = await scraper.scrape_quiz_data(request.url)
+        html_content = scraped_data.get("raw_html", "")
+        if not html_content:
+            raise HTTPException(status_code=404, detail="Could not retrieve content from URL.")
 
-@app.post("/api/deploy")
-async def deploy_app(request: DeployRequest):
-    """
-    Main deployment endpoint for both Round 1 and Round 2
-    """
-    print(f"🎯 Received deployment request for: {request.email} (Round {request.round})")
-    
-    # 1. Verify secret
-    if request.secret != config.DEPLOYMENT_SECRET:
-        raise HTTPException(status_code=403, detail="Invalid deployment secret")
-    
-    # 2. Generate application code
-    try:
-        print(f"📝 Generating app for: {request.email}")
-        attachments_data = [att.dict() for att in request.attachments]
+        # The new scraper provides the questions and submission URL directly
+        questions_text = scraped_data.get("questions", [])
+        submission_url = scraped_data.get("submission_url")
+
+        # Combine visible questions with any hidden data found
+        context_for_solving = "\n".join(questions_text) + "\n" + "\n".join(scraped_data.get("hidden_data", []))
         
-        if code_generator:
-            generated_files = code_generator.generate_app(request.brief, attachments_data)
-        else:
-            generated_files = {
-                "index.html": f"<html><body><h1>Fallback App</h1><p>{request.brief}</p></body></html>",
-                "README.md": f"# Fallback App\n\n{request.brief}",
-                "LICENSE": "MIT License"
-            }
-            
-        print(f"✅ Generated {len(generated_files)} files")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Code generation failed: {str(e)}")
-    
-    # 3. GitHub operations - CRITICAL FIX: Use SAME repo for all rounds
-    # Always use the base task name without round suffix for the repository
-    repo_name = request.task  # Use just the task name, no round suffix
-    
-    try:
-        if request.round == 1:
-            # ROUND 1: Create new repository
-            print(f"🔧 Creating NEW repository: {repo_name}")
-            repo_info = github_manager.create_repo(repo_name)
-            repo_url = repo_info['response']['html_url']
-            
-            commit_message = f"Round {request.round}: {request.brief[:50]}..."
-            push_info = github_manager.push_files(repo_name, generated_files, commit_message)
-            commit_sha = push_info['response']['commit_sha']
-            
-        else:
-            # ROUND 2+: Update existing repository (SAME repo as Round 1)
-            print(f"🔧 Updating EXISTING repository: {repo_name}")
-            
-            # Get repo info (this will work for existing repos)
-            repo_info = github_manager.create_repo(repo_name)  # This now handles existing repos
-            repo_url = repo_info['response']['html_url']
-            
-            commit_message = f"Round {request.round} Update: {request.brief[:50]}..."
-            push_info = github_manager.update_repo(repo_name, generated_files, commit_message)
-            commit_sha = push_info['response']['commit_sha']
+        answers = {}
+        for i, question_str in enumerate(questions_text):
+            answer = orchestrator.solve_question(question_str, context_for_solving)
+            answers[f"question_{i+1}"] = answer
         
-        # Enable/update Pages (same for both rounds)
-        pages_info = github_manager.enable_pages(repo_name)
-        pages_url = pages_info['response']['html_url']
+        # Step 4: Submit the answers
+        if not submission_url:
+            raise HTTPException(status_code=400, detail="Submission URL not found in quiz structure.")
         
-        print(f"✅ GitHub operations completed for {repo_name}")
+        # Ensure the submission URL is absolute
+        full_submission_url = urljoin(request.url, submission_url)
         
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"GitHub operations failed: {str(e)}")
-    
-    # 4. Evaluation service notification
-    try:
-        print(f"📨 Sending evaluation notification to: {request.evaluation_url}")
-        
-        evaluation_data = {
-            "email": request.email,
-            "task": request.task,
-            "round": request.round,
-            "nonce": request.nonce,
-            "repo_url": repo_url,
-            "commit_sha": commit_sha,
-            "pages_url": pages_url,
+        submission_result = handler.submit_answers(full_submission_url, answers)
+
+        return {
+            "status": "submission_complete",
+            "url": request.url,
+            "submission_details": submission_result
         }
-        
-        success = notify_evaluation_service(request.evaluation_url, evaluation_data)
-        if not success:
-            print("⚠️ Evaluation service notification failed, but continuing...")
-            
+
     except Exception as e:
-        print(f"⚠️ Evaluation notification failed: {e}")
-    
-    # 5. Return success response
-    return {
-        "status": "success",
-        "message": f"Round {request.round} deployment completed",
-        "repo_url": repo_url,
-        "commit_sha": commit_sha,
-        "pages_url": pages_url,
-        "generated_files": list(generated_files.keys()),
-        "mode": "mock" if config.MOCK_MODE else "production",
-        "action": "updated" if request.round > 1 else "created"
-    }
+        print(f"An error occurred during the process: {e}")
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
+    import os
     port = int(os.environ.get("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run("app.main:app", host="0.0.0.0", port=port, reload=True)
